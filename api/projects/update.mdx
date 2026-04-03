@@ -1,0 +1,166 @@
+---
+title: "Update Project"
+description: "Partially update a project's fields. Updating overall_progress automatically appends a progress history entry."
+---
+
+## Overview
+
+Updates one or more fields on an existing project using a partial body. Only fields included in the request body are modified; omitted fields retain their current values.
+
+When `overall_progress` is included in the request, the server automatically appends a new entry to the project's `progress_history` array timestamped to the current time.
+
+`PUT /api/projects/{id}`
+
+## Path parameters
+
+<ParamField path="id" type="string" required>
+  The project's unique identifier (MongoDB ObjectId string).
+</ParamField>
+
+## Request body
+
+All body fields are optional. Supply only the fields you want to change.
+
+<ParamField body="name" type="string">
+  New display name for the project.
+</ParamField>
+
+<ParamField body="reference_type" type="string">
+  Updated spatial reference method. Must be `images` or `3d_model`.
+</ParamField>
+
+<ParamField body="model_url" type="string">
+  Updated path or URL to the 3D model file.
+</ParamField>
+
+<ParamField body="target_completion_date" type="string">
+  Updated target completion date in ISO 8601 format (e.g., `2026-06-30`).
+</ParamField>
+
+<ParamField body="overall_progress" type="number">
+  Updated aggregate progress percentage (0–100). Automatically creates a new `progress_history` entry when set.
+</ParamField>
+
+<Note>
+  Updating `overall_progress` appends a timestamped snapshot to `progress_history`. This powers the progress timeline chart in the dashboard.
+</Note>
+
+## Response
+
+Returns the full updated project object.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the project.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Updated display name.
+</ResponseField>
+
+<ResponseField name="reference_type" type="string" required>
+  Spatial reference method (`images` or `3d_model`).
+</ResponseField>
+
+<ResponseField name="model_url" type="string | null">
+  Path to the 3D model, or `null`.
+</ResponseField>
+
+<ResponseField name="target_completion_date" type="string | null">
+  ISO 8601 target completion date, or `null`.
+</ResponseField>
+
+<ResponseField name="overall_progress" type="number" required>
+  Updated aggregate progress (0–100).
+</ResponseField>
+
+<ResponseField name="budget" type="number" required>
+  Total project budget (unchanged unless explicitly updated).
+</ResponseField>
+
+<ResponseField name="progress_history" type="object[]" required>
+  Full history array including any newly appended entry.
+
+  <Expandable title="properties">
+    <ResponseField name="date" type="string" required>
+      ISO 8601 timestamp of when this snapshot was recorded.
+    </ResponseField>
+
+    <ResponseField name="progress" type="number" required>
+      Progress value at the time of this snapshot (0–100).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  ISO 8601 timestamp for when the project was originally created.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X PUT https://your-domain.com/api/projects/6627a1b2c3d4e5f6a7b8c9d0 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "overall_progress": 65,
+    "target_completion_date": "2026-03-15"
+  }'
+```
+
+```typescript TypeScript
+const id = '6627a1b2c3d4e5f6a7b8c9d0';
+
+const response = await fetch(`https://your-domain.com/api/projects/${id}`, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    overall_progress: 65,
+    target_completion_date: '2026-03-15',
+  }),
+});
+
+if (!response.ok) {
+  const error = await response.json();
+  throw new Error(error.error);
+}
+
+const updated = await response.json();
+console.log(updated.overall_progress); // 65
+```
+
+</CodeGroup>
+
+## Response example
+
+```json 200
+{
+  "id": "6627a1b2c3d4e5f6a7b8c9d0",
+  "name": "Tower Block A",
+  "reference_type": "3d_model",
+  "model_url": "/uploads/Tower_Block_A_1714000000000.glb",
+  "target_completion_date": "2026-03-15T00:00:00.000Z",
+  "overall_progress": 65,
+  "budget": 1500000,
+  "progress_history": [
+    { "date": "2024-04-01T09:00:00.000Z", "progress": 0 },
+    { "date": "2024-06-15T14:30:00.000Z", "progress": 42 },
+    { "date": "2024-09-10T08:15:00.000Z", "progress": 65 }
+  ],
+  "created_at": "2024-04-01T09:00:00.000Z"
+}
+```
+
+## Error responses
+
+```json 404
+{
+  "error": "Project not found"
+}
+```
+
+```json 500
+{
+  "error": "Failed to connect to database"
+}
+```

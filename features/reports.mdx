@@ -1,0 +1,75 @@
+---
+title: "Shareholder Reports"
+description: "AI-generated video reports that communicate project status and financial impact to stakeholders."
+---
+
+BuildPulse can generate a professional video report for any project with a single click. The report is produced by the OpenNote SDK using the `picasso` model and covers everything a shareholder or investor needs: progress, timeline, financial position, and risk.
+
+## How to generate a report
+
+<Steps>
+  <Step title="Open the project detail page">
+    Navigate to `/project/[id]` for the project you want to report on.
+  </Step>
+  <Step title="Click Generate Report">
+    Find the **Generate Report** button in the project header. Clicking it sends a `POST` request to `/api/report` with the project ID and starts the video generation process.
+  </Step>
+  <Step title="Wait for the video to render">
+    A progress dialog appears while the report is generating. This is an asynchronous process—BuildPulse polls `GET /api/report?videoId=xxx&projectId=xxx` every five seconds until the status changes to `completed`.
+  </Step>
+  <Step title="View the report">
+    When generation finishes, a **View Report** button appears. The video is stored in `/public/reports/` and linked from the project record so you can replay it at any time.
+  </Step>
+</Steps>
+
+## What the report covers
+
+The report script is built from live project data and walks through eleven sections:
+
+1. **Executive summary** — project status and overall financial position at a glance
+2. **Progress highlights** — what has been accomplished since the project began
+3. **Current phase details** — where the project sits in the construction timeline
+4. **Budget status** — financial overview and cost analysis against the total budget
+5. **Timeline analysis** — days remaining and an assessment of whether the project is on track
+6. **Financial impact** — cost savings if the project is ahead of schedule, or projected cost overruns if it is behind
+7. **Zone-by-zone progress** — individual completion percentage and status for each zone
+8. **Risk assessment** — concerns or blockers that could cause further delays
+9. **Cost mitigation strategies** — steps to limit additional costs if the project is running late
+10. **Next steps** — upcoming milestones and what to expect in the near term
+11. **Conclusion** — summary with financial outlook and confidence level for on-time completion
+
+## Financial impact calculation
+
+BuildPulse estimates daily delay costs at **0.1% of the project budget per day** (a conservative industry benchmark covering labor, equipment rental, financing, and overhead). For example, a $2 million project carries an estimated daily delay cost of $2,000.
+
+- If the project is **ahead** of schedule, the report highlights projected cost savings at this rate.
+- If the project is **behind** schedule, the report quantifies the potential cost overrun and surfaces it prominently for stakeholders.
+
+## Checking report status
+
+Report generation is asynchronous. You can check the status directly:
+
+```bash
+GET /api/report?videoId=VIDEO_ID&projectId=PROJECT_ID
+```
+
+The response includes:
+
+```json
+{
+  "status": "completed",
+  "progress": 100,
+  "message": "Video ready",
+  "videoUrl": "/reports/report-PROJECT_ID-TIMESTAMP.mp4"
+}
+```
+
+Possible `status` values are `pending`, `processing`, `completed`, and `failed`. Once `completed`, the `videoUrl` field contains the local path where the file was saved.
+
+<Note>
+The video is first uploaded to S3 by the OpenNote SDK, then downloaded and saved locally to `/public/reports/`. The local path is what gets stored on the project record and served to the browser. If the local download fails, BuildPulse falls back to the S3 URL.
+</Note>
+
+<Tip>
+Reports are most useful after you have several zones with check-in history. A project with only one or two check-ins will produce a report with limited timeline analysis and a low-confidence financial forecast. Aim for at least a week of consistent check-ins before generating a report for investors.
+</Tip>

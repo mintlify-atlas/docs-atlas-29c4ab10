@@ -1,0 +1,63 @@
+---
+title: "Retrieve File"
+description: "Retrieve a 3D model or other file from GridFS storage by its file ID."
+---
+
+`GET /api/files/{id}`
+
+Returns a file stored in MongoDB GridFS as a base64-encoded data URL. This is used to load 3D models (`.glb`, `.gltf`) into the in-browser viewer when the model was stored via GridFS rather than the local filesystem.
+
+---
+
+## Path parameters
+
+<ParamField path="id" type="string" required>
+  The GridFS file ID (MongoDB ObjectId string) returned when the file was uploaded to GridFS.
+</ParamField>
+
+---
+
+## Response
+
+<ResponseField name="data" type="string">
+  Base64 data URL of the file contents, including the appropriate MIME type prefix:
+  - `data:model/gltf-binary;base64,...` for `.glb` files
+  - `data:model/gltf+json;base64,...` for `.gltf` files
+  - `data:image/jpeg;base64,...` for other file types
+</ResponseField>
+
+---
+
+## Error responses
+
+| Status | Cause |
+|--------|-------|
+| `500` | The file ID is not a valid MongoDB ObjectId, or the file does not exist in GridFS. |
+
+---
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+curl 'https://your-buildpulse-app.vercel.app/api/files/64f1a2b3c4d5e6f7a8b9c0d1'
+```
+
+```typescript TypeScript
+const res = await fetch('/api/files/64f1a2b3c4d5e6f7a8b9c0d1')
+const { data } = await res.json()
+// data = 'data:model/gltf-binary;base64,Z2xURgIAAAA...'
+
+// Load into a Three.js GLTFLoader
+const loader = new GLTFLoader()
+loader.load(data, (gltf) => {
+  scene.add(gltf.scene)
+})
+```
+
+</CodeGroup>
+
+<Note>
+  In most BuildPulse deployments, 3D models are saved to the local filesystem under `public/uploads/` and served directly as static files. This endpoint is used when a model was stored via GridFS (for example, when the local filesystem is not available). The `model_url` field on a project indicates which storage method was used: a path starting with `/uploads/` is a local file; a MongoDB ObjectId string indicates a GridFS-stored file.
+</Note>

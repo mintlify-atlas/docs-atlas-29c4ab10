@@ -1,0 +1,130 @@
+---
+title: "Analyze Progress Photo"
+description: "Submit a construction photo for AI analysis powered by Gemini 2.0 Flash."
+---
+
+`POST /api/analyze`
+
+Sends a construction site photo to **Gemini 2.0 Flash** and receives a structured completion estimate. The model is instructed to focus exclusively on the named zone, ignoring surrounding areas of the building.
+
+The response is suitable for passing directly into [`POST /api/progress`](/api/progress/overview) to record an AI-backed check-in entry.
+
+<Note>
+This endpoint requires a valid `GOOGLE_GENERATIVE_AI_API_KEY` environment variable. See your project's `.env.local` file.
+</Note>
+
+---
+
+## Request
+
+### Body parameters
+
+<ParamField body="progressPhoto" type="string" required>
+  Base64-encoded image with a data URL prefix. Supported MIME types: `image/jpeg` and `image/png`.
+
+  Example: `data:image/jpeg;base64,/9j/4AAQSkZJRgAB...`
+
+  The MIME type is detected automatically from the prefix — `image/png` if the prefix contains `image/png`, otherwise `image/jpeg`.
+</ParamField>
+
+<ParamField body="roomName" type="string" required>
+  The name of the zone being analysed (e.g. `"Kitchen"`, `"Roof Level 2"`, `"Master Bathroom"`). This is embedded into the AI prompt so the model knows what to look for in the photo.
+</ParamField>
+
+---
+
+## Response
+
+Returns an `AnalysisResult` object on success.
+
+<ResponseField name="percent_complete" type="number">
+  Estimated completion of the named zone, 0–100. Scored using the following guide:
+
+  | Range | Meaning |
+  |-------|---------|
+  | 0–20% | Just started — mainly framing or foundation |
+  | 20–40% | Structure in place, rough work ongoing |
+  | 40–60% | Major structure complete, MEP rough-in underway |
+  | 60–80% | Surfaces installed, finishing started |
+  | 80–100% | Nearly complete, final touches or inspection ready |
+</ResponseField>
+
+<ResponseField name="confidence" type="string">
+  How confident the model is in its estimate: `"high"`, `"medium"`, or `"low"`.
+</ResponseField>
+
+<ResponseField name="visible_completed" type="string[]">
+  Work items the model can see are complete in the photo (e.g. `["framing complete", "drywall installed"]`).
+</ResponseField>
+
+<ResponseField name="still_missing" type="string[]">
+  Work items the model identified as not yet finished (e.g. `["flooring", "paint", "cabinet installation"]`).
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  A brief natural-language observation from the model about the zone's current state.
+</ResponseField>
+
+---
+
+## Error responses
+
+| Status | Cause |
+|--------|-------|
+| `400` | `progressPhoto` or `roomName` is missing from the request body. |
+| `500` | `GOOGLE_GENERATIVE_AI_API_KEY` is not configured. |
+| `500` | Gemini returned a response that could not be parsed as valid JSON. |
+| `500` | Gemini returned JSON that does not match the expected `AnalysisResult` shape. |
+
+<Warning>
+The model occasionally wraps its JSON response in a Markdown code block. BuildPulse strips these automatically, but if the response is unparseable the endpoint returns a `500` with the raw text in the `raw` field for debugging.
+</Warning>
+
+---
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST 'https://your-buildpulse-app.vercel.app/api/analyze' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "progressPhoto": "data:image/jpeg;base64,/9j/4AAQSkZJRgAB...",
+    "roomName": "Kitchen"
+  }'
+```
+
+```typescript TypeScript
+// Convert a File object to a base64 data URL
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+const dataUrl = await fileToDataUrl(selectedFile)
+
+const response = await fetch('/api/analyze', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    progressPhoto: 'data:image/jpeg;base64,/9j/4AAQ...',
+    roomName: 'Kitchen',
+  }),
+})
+
+const result = await response.json()
+// {
+//   percent_complete: 67,
+//   confidence: 'high',
+//   visible_completed: ['framing complete', 'drywall installed', 'rough electrical done'],
+//   still_missing: ['flooring', 'cabinet installation', 'paint'],
+//   notes: 'Kitchen is well progressed. Structural and rough work look solid.'
+// }
+```
+
+</CodeGroup>

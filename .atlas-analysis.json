@@ -1,0 +1,94 @@
+{
+  "projectType": "saas",
+  "projectName": "BuildPulse",
+  "projectDescription": "AI-powered construction progress tracking that uses Gemini vision to analyze site photos against 3D building models, turning hours of manual assessment into instant, actionable insights.",
+  "theme": "luma",
+  "primaryColor": "#94cb04",
+  "lightColor": "#545454",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart", "environment-variables"]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/projects",
+              "features/zones",
+              "features/ai-analysis",
+              "features/delay-prediction",
+              "features/reports"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/mongodb",
+              "integrations/supabase",
+              "integrations/auth0",
+              "integrations/gemini"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Projects",
+            "pages": [
+              "api/projects/list",
+              "api/projects/create",
+              "api/projects/get",
+              "api/projects/update",
+              "api/projects/delete"
+            ]
+          },
+          {
+            "group": "Zones & Progress",
+            "pages": [
+              "api/zones/overview",
+              "api/progress/overview",
+              "api/analyze",
+              "api/upload",
+              "api/report"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "3D model upload via MongoDB GridFS for .glb/.gltf files up to 50MB",
+    "Interactive zone assignment by clicking directly on 3D models",
+    "AI progress analysis using Gemini 2.0 Flash to compare site photos against model renders",
+    "Velocity-based delay prediction with linear regression on progress history",
+    "Automated shareholder video report generation via OpenNote SDK",
+    "Auth0 authentication with Next.js middleware protection",
+    "Supabase storage for reference images and progress photos",
+    "Real-time dashboard with per-zone completion percentages"
+  ],
+  "publicApiSurface": [
+    "GET /api/projects — list all projects",
+    "POST /api/projects — create a new project",
+    "GET /api/projects/[id] — get project with rooms",
+    "PUT /api/projects/[id] — update project",
+    "DELETE /api/projects/[id] — delete project",
+    "GET /api/rooms — list rooms/zones",
+    "POST /api/rooms — create a room/zone",
+    "GET /api/rooms/[id] — get room with progress entries",
+    "PUT /api/rooms/[id] — update room",
+    "DELETE /api/rooms/[id] — delete room",
+    "GET /api/progress — list progress entries",
+    "POST /api/progress — create progress entry",
+    "POST /api/analyze — AI photo analysis via Gemini",
+    "POST /api/upload — upload files to Supabase Storage",
+    "POST /api/report — generate shareholder video report",
+    "GET /api/report — check video generation status"
+  ]
+}

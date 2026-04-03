@@ -1,0 +1,86 @@
+---
+title: "AI Progress Analysis"
+description: "How Gemini 2.0 Flash estimates zone completion from a single construction photo."
+---
+
+BuildPulse uses Google Gemini 2.0 Flash to analyze construction photos during check-ins. Upload a photo of the job site for a given zone, and the model returns a structured progress estimate in under five seconds.
+
+## How it works
+
+When you submit a check-in photo, BuildPulse sends the image to the `/api/analyze` endpoint along with the zone name. The endpoint passes both to Gemini 2.0 Flash with a structured prompt that tells the model exactly what to look for and how to score it.
+
+The AI focuses exclusively on the named zone. Any other parts of the building visible in the photo are intentionally ignored.
+
+## What the AI looks for
+
+The analysis prompt instructs Gemini to evaluate four categories of construction work within the named zone:
+
+- **Structural elements** — framing, supports, base structure
+- **Surface work** — concrete, drywall, sheathing
+- **Fixtures and installations** — plumbing, electrical, HVAC rough-ins
+- **Finishing work** — paint, trim, final touches
+
+## Scoring guide
+
+Gemini maps its observations to a 0–100% completion scale using the following reference points:
+
+| Range | Meaning |
+|---|---|
+| 0–20% | Just started; mainly framing or foundation visible |
+| 20–40% | Structure in place, rough work ongoing |
+| 40–60% | Major structural complete, MEP rough-in underway |
+| 60–80% | Surfaces installed, finishing started |
+| 80–100% | Nearly complete; final touches or inspection-ready |
+
+## Analysis result
+
+The API returns a JSON object matching this interface:
+
+```typescript
+interface AnalysisResult {
+  percent_complete: number
+  confidence: 'high' | 'medium' | 'low'
+  visible_completed: string[]
+  still_missing: string[]
+  notes: string
+}
+```
+
+| Field | Description |
+|---|---|
+| `percent_complete` | Estimated completion percentage (0–100) |
+| `confidence` | How certain the model is about its estimate |
+| `visible_completed` | List of completed items the model identified |
+| `still_missing` | List of items not yet visible in the photo |
+| `notes` | A brief free-text observation from the model |
+
+The check-in screen displays all five fields after analysis completes, so you can review what the AI saw before saving the result to the zone.
+
+## Example response
+
+```json
+{
+  "percent_complete": 67,
+  "confidence": "high",
+  "visible_completed": [
+    "Foundation poured",
+    "Rebar installed",
+    "Forms removed",
+    "Initial curing complete"
+  ],
+  "still_missing": [
+    "Final grading",
+    "Waterproofing membrane",
+    "Drainage system"
+  ],
+  "notes": "Foundation slab appears fully cured. Perimeter drain is not yet visible."
+}
+```
+
+<Tip>
+Clear, well-lit photos taken from a stable angle produce higher confidence ratings. Blurry images, extreme backlighting, or photos taken from very oblique angles give the model less information to work with and typically result in `low` confidence estimates.
+</Tip>
+
+<Note>
+The analysis prompt explicitly instructs Gemini to ignore everything outside the named zone. If your photo shows multiple areas of the site, only the portion relevant to the zone you are checking in will influence the score.
+</Note>

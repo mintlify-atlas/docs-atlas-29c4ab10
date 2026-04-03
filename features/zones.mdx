@@ -1,0 +1,70 @@
+---
+title: "Zones"
+description: "Defining and tracking discrete construction areas within a project."
+---
+
+Zones are the trackable units inside a project. Each zone represents a discrete area of the building—such as Kitchen, Roof, Foundation, or Exterior Walls—and accumulates a completion percentage through check-ins over time.
+
+## Zone data model
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique zone identifier (MongoDB ObjectId as string) |
+| `project_id` | string | The parent project this zone belongs to |
+| `name` | string | Zone display name (e.g., "Foundation", "Roof") |
+| `reference_image_url` | string \| null | URL of the reference image used during check-ins |
+| `model_camera_position` | object \| null | Stored 3D camera position for consistent model renders |
+| `mesh_assignments` | string[] | UUIDs of 3D model meshes assigned to this zone |
+| `current_percent` | number | Current completion percentage (0–100) |
+| `created_at` | string | ISO timestamp of zone creation |
+
+The `model_camera_position` field captures the exact camera angle at the moment you click a mesh in the 3D viewer. BuildPulse stores this so that every subsequent render of that zone uses the same viewpoint, making progress comparisons consistent over time.
+
+## Reference types
+
+How you add zones depends on the reference type you chose when creating the project.
+
+### 3D model zones
+
+For projects with a 3D model reference, open the project detail page. The interactive viewer renders your `.glb` or `.gltf` file using React Three Fiber. Click directly on any mesh in the model to select that surface, then give the zone a name. BuildPulse records the camera position at the time of the click via raycasting, and the zone is saved.
+
+### Image-based zones
+
+For projects using images as a reference, zones are created during project setup. When you add an interior room in the creation wizard, that room becomes a zone with its uploaded photos as the reference image. Exterior images also create their own zone entries.
+
+## Zone status
+
+Each zone's `current_percent` maps to a status label used throughout the UI:
+
+| Progress range | Status |
+|---|---|
+| 0–49% | Early Stage |
+| 50–99% | In Progress |
+| 100% | Complete |
+
+## Adding a zone to a project
+
+<Steps>
+  <Step title="Open the project detail page">
+    Navigate to `/project/[id]` for the project you want to update.
+  </Step>
+  <Step title="Use the 3D model viewer">
+    For 3D model projects, click any mesh in the interactive viewer to highlight it. A prompt appears asking you to name the zone.
+  </Step>
+  <Step title="Name and save the zone">
+    Enter a descriptive name (for example, "East Exterior Wall") and confirm. The zone is added to the project and appears in the zones grid below the model.
+  </Step>
+</Steps>
+
+## How zones track progress
+
+Each zone starts at `0%`. Progress updates through the check-in flow at `/checkin/[zoneId]`:
+
+1. You upload a current site photo for the zone.
+2. Gemini 2.0 Flash analyzes the photo and returns a `percent_complete` estimate.
+3. The zone's `current_percent` is updated to the AI's estimate.
+4. The project's `overall_progress` is recalculated as the average across all zones.
+
+<Note>
+The `model_camera_position` field only applies to 3D model projects. For image-based zones, the reference image URL serves the same purpose of giving the AI consistent context for each check-in.
+</Note>

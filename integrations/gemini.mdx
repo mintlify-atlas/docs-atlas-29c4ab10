@@ -1,0 +1,112 @@
+---
+title: "Google Gemini AI"
+description: "How BuildPulse uses Gemini 2.0 Flash to analyze construction photos and estimate zone completion percentages."
+---
+
+BuildPulse uses Google Gemini 2.0 Flash to compare construction site photos against zone context and return a structured estimate of how much work is complete. This turns a manual, hours-long assessment into a result returned in under 5 seconds.
+
+## Model configuration
+
+The analysis endpoint in `app/api/analyze/route.ts` initializes the model via the `@google/generative-ai` SDK:
+
+```typescript
+import { GoogleGenerativeAI } from '@google/generative-ai'
+
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!)
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+```
+
+## How analysis works
+
+When a progress photo is submitted, the API endpoint:
+
+1. Builds a prompt that describes the target zone (e.g., "Kitchen") and instructs Gemini to focus only on that zone, ignoring other visible parts of the building.
+2. Strips the `data:image/...;base64,` prefix from the photo and detects its MIME type — `image/png` or `image/jpeg`.
+3. Sends both the text prompt and the inline image to Gemini.
+
+The API call uses a low temperature and a bounded token limit to produce consistent, factual JSON rather than open-ended prose:
+
+```typescript
+const result = await model.generateContent({
+  contents: [
+    {
+      role: 'user',
+      parts: [
+        { text: prompt },
+        {
+          inlineData: {
+            mimeType: progressMime,
+            data: progressData,
+          },
+        },
+      ],
+    },
+  ],
+  generationConfig: {
+    temperature: 0.1,
+    maxOutputTokens: 1024,
+  },
+})
+```
+
+## Response format
+
+Gemini returns a JSON object that the API validates before forwarding to the client:
+
+```json
+{
+  "percent_complete": 67,
+  "confidence": "high",
+  "visible_completed": ["framing", "concrete slab", "exterior sheathing"],
+  "still_missing": ["drywall", "electrical rough-in", "insulation"],
+  "notes": "Structural work is largely complete. Interior finishing not yet started."
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `percent_complete` | `number` | Estimated completion (0–100) |
+| `confidence` | `string` | `high`, `medium`, or `low` |
+| `visible_completed` | `string[]` | Work items identified as done |
+| `still_missing` | `string[]` | Work items not yet visible |
+| `notes` | `string` | Free-form observation from Gemini |
+
+The endpoint performs schema validation on the response — if `percent_complete` is not a number or `confidence` is not one of the three valid values, the request fails with a 500 so invalid data never reaches the database.
+
+## Supported image formats
+
+Gemini accepts **JPEG** and **PNG** images. The MIME type is detected from the data URL prefix and passed as `inlineData.mimeType`. Other formats are treated as JPEG by default.
+
+## Getting an API key
+
+<Steps>
+  <Step title="Open Google AI Studio">
+    Go to [aistudio.google.com](https://aistudio.google.com) and sign in with a Google account.
+  </Step>
+
+  <Step title="Create an API key">
+    Click **Get API key → Create API key**. Copy the generated key.
+  </Step>
+
+  <Step title="Add the key to your environment">
+    Add the following to your `.env.local`:
+
+    ```bash
+    GOOGLE_GENERATIVE_AI_API_KEY=your_api_key_here
+    ```
+
+    Restart your dev server after saving.
+  </Step>
+</Steps>
+
+## Environment variable
+
+| Variable | Description |
+|---|---|
+| `GOOGLE_GENERATIVE_AI_API_KEY` | API key from Google AI Studio |
+
+The endpoint checks for this variable at request time and returns a 500 error if it is missing, rather than failing at startup.
+
+<Tip>
+  Gemini is also used for stakeholder report generation via the OpenNote SDK. That integration reads the same API key but invokes a different prompt optimized for video narration.
+</Tip>

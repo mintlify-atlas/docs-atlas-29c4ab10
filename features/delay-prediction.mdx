@@ -1,0 +1,85 @@
+---
+title: "Delay Prediction"
+description: "Velocity-based forecasting that estimates your completion date and flags deadline risks early."
+---
+
+BuildPulse analyses your project's progress history to forecast when work will finish. Rather than assuming a fixed rate, the prediction engine fits a line through your actual check-in data and extrapolates forward—catching deadline risks weeks before they become emergencies.
+
+## How it works
+
+The `calculateProjectPrediction` function in `lib/ai-prediction.ts` runs a linear regression over your recorded progress entries. It derives a velocity (percent of completion per day) from the slope of the regression line, then projects forward from the current progress value to estimate when the project will reach 100%.
+
+### Function signature
+
+```typescript
+function calculateProjectPrediction(
+  progressHistory: ProgressEntry[],
+  currentProgress: number,
+  targetDate: Date | string
+): PredictionResult
+```
+
+| Parameter | Description |
+|---|---|
+| `progressHistory` | Array of `{ date, progress }` entries from previous check-ins |
+| `currentProgress` | The project's current overall progress percentage |
+| `targetDate` | The project's target completion date |
+
+### Result shape
+
+```typescript
+interface PredictionResult {
+  estimatedCompletionDate: Date
+  estimatedCompletionString: string
+  daysEarlyOrLate: number  // positive = late, negative = early
+  isOnTrack: boolean
+  velocity: number         // % per day
+  confidence: 'high' | 'medium' | 'low'
+}
+```
+
+| Field | Description |
+|---|---|
+| `estimatedCompletionDate` | Predicted finish date as a `Date` object |
+| `estimatedCompletionString` | Human-readable version (e.g., "Jun 15, 2025") |
+| `daysEarlyOrLate` | How many days ahead (negative) or behind (positive) the estimate is versus the target date |
+| `isOnTrack` | `true` when the estimated completion date is on or before the target date |
+| `velocity` | Rate of progress in percent per day |
+| `confidence` | Statistical confidence in the prediction |
+
+## Confidence levels
+
+Confidence is derived from the R² goodness-of-fit score of the regression and the number of data points available:
+
+| Confidence | Requirements |
+|---|---|
+| `high` | R² > 0.8 and at least 5 progress entries |
+| `medium` | R² > 0.6 and at least 3 progress entries |
+| `low` | Fewer than 3 entries or R² ≤ 0.6 |
+
+When there are fewer than 2 entries in `progressHistory`, the engine falls back to a simple linear interpolation between current progress and the target date. This always returns `low` confidence.
+
+## Key concepts
+
+**Velocity** is the slope of the regression line—how many percentage points of progress the project gains per day on average. A velocity of 2.5 means the project is completing roughly 2.5% of its total scope each day.
+
+**R²** (R-squared) measures how consistently progress has been tracking against the regression line. A high R² means check-ins have been steady and predictable; a low R² indicates irregular progress that is harder to extrapolate.
+
+**`daysEarlyOrLate`** is the signed difference between the estimated completion date and the target date. A positive value means the project is projected to finish late; a negative value means it is projected to finish early.
+
+## Dashboard delay indicator
+
+In addition to the prediction engine, the dashboard uses a simpler real-time check: a project is flagged as **Behind** when its deadline is one day away or fewer (`daysUntilDeadline <= 1`) and it has at least one zone. This is an immediate warning independent of the regression model.
+
+<Tip>
+More frequent check-ins give the regression model more data points to work with, which raises the R² score and increases the chance of reaching `high` confidence. Daily check-ins are ideal for active zones.
+</Tip>
+
+<Accordion title="Why is my prediction showing low confidence?">
+Low confidence means the prediction engine does not have enough data to produce a reliable forecast. This happens when:
+
+- The project has fewer than 3 progress entries recorded across its check-in history
+- Progress has been highly irregular (large R² residuals), making the regression line a poor fit
+
+To improve confidence, submit at least 3 check-ins spread over different days. Once you have 5 or more consistent entries, the model will upgrade to `high` confidence if the R² score exceeds 0.8.
+</Accordion>

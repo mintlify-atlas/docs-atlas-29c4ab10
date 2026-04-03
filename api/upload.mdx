@@ -1,0 +1,133 @@
+---
+title: "Upload Files"
+description: "Upload 3D models, reference images, and progress photos to Supabase Storage."
+---
+
+`POST /api/upload`
+
+Accepts a base64 data URL and uploads it to the appropriate Supabase Storage bucket. Returns a public URL you can store on a zone or progress entry.
+
+---
+
+## Storage buckets
+
+BuildPulse uses three buckets defined in `lib/supabase.ts`:
+
+```typescript
+export const STORAGE_BUCKETS = {
+  MODELS: 'models',
+  REFERENCE_IMAGES: 'reference-images',
+  PROGRESS_PHOTOS: 'progress-photos',
+} as const
+```
+
+| Bucket key | Bucket name | Typical use |
+|------------|-------------|-------------|
+| `MODELS` | `models` | GLB / GLTF 3D model files for the viewer |
+| `REFERENCE_IMAGES` | `reference-images` | Architectural drawings and reference photos |
+| `PROGRESS_PHOTOS` | `progress-photos` | Site photos captured during check-ins |
+
+<Note>
+The `bucket` field in the request body must be one of the three **key names** — `MODELS`, `REFERENCE_IMAGES`, or `PROGRESS_PHOTOS` — not the raw bucket string.
+</Note>
+
+---
+
+## Request
+
+### Body parameters
+
+<ParamField body="dataUrl" type="string" required>
+  Base64-encoded file as a data URL (e.g. `data:image/jpeg;base64,/9j/4AAQ...` or `data:model/gltf-binary;base64,...`). This is the format produced by the browser's `FileReader.readAsDataURL()` API.
+</ParamField>
+
+<ParamField body="fileName" type="string" required>
+  Original file name including extension (e.g. `kitchen-reference.jpg`, `building-model.glb`). A unique timestamp prefix is prepended automatically to prevent collisions.
+</ParamField>
+
+<ParamField body="bucket" type="string" required>
+  Target bucket key. Must be one of: `MODELS`, `REFERENCE_IMAGES`, `PROGRESS_PHOTOS`.
+</ParamField>
+
+---
+
+## Response
+
+Returns HTTP `201` on success.
+
+<ResponseField name="url" type="string">
+  Public URL of the uploaded file in Supabase Storage. Store this on the relevant zone (`reference_image_url`, `model_url`) or progress entry (`photo_url`).
+</ResponseField>
+
+### Error responses
+
+| Status | Cause |
+|--------|-------|
+| `400` | One or more of `dataUrl`, `fileName`, or `bucket` is missing. |
+| `400` | `bucket` is not one of the three valid key names. |
+| `500` | Supabase Storage returned an error (e.g. bucket does not exist, permissions misconfigured). |
+
+---
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+# Encode a local file and upload it
+DATA_URL="data:image/jpeg;base64,$(base64 -i kitchen.jpg)"
+
+curl -X POST 'https://your-buildpulse-app.vercel.app/api/upload' \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"dataUrl\": \"$DATA_URL\",
+    \"fileName\": \"kitchen-checkin.jpg\",
+    \"bucket\": \"PROGRESS_PHOTOS\"
+  }"
+```
+
+```typescript TypeScript
+async function uploadFile(file: File, bucket: 'MODELS' | 'REFERENCE_IMAGES' | 'PROGRESS_PHOTOS') {
+  // Convert File to base64 data URL
+  const dataUrl: string = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dataUrl,
+      fileName: file.name,
+      bucket,
+    }),
+  })
+
+  if (!res.ok) {
+    const { error } = await res.json()
+    throw new Error(error)
+  }
+
+  const { url } = await res.json()
+  return url
+  // 'https://xyz.supabase.co/storage/v1/object/public/progress-photos/1700000000-kitchen_checkin.jpg'
+}
+
+// Upload a progress photo
+const photoUrl = await uploadFile(photoFile, 'PROGRESS_PHOTOS')
+
+// Upload a reference image
+const refUrl = await uploadFile(drawingFile, 'REFERENCE_IMAGES')
+
+// Upload a 3D model
+const modelUrl = await uploadFile(glbFile, 'MODELS')
+```
+
+</CodeGroup>
+
+<Note>
+Files are stored with `cacheControl: '3600'` and `upsert: false`. Uploading a file with the same name twice will not overwrite — the timestamp prefix ensures uniqueness.
+</Note>

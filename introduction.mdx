@@ -1,0 +1,62 @@
+---
+title: "Introduction"
+description: "BuildPulse is an AI-powered construction progress tracking platform that turns daily site photos into instant completion estimates and early delay warnings."
+---
+
+BuildPulse combines interactive 3D model visualization with Google Gemini AI vision to replace manual construction progress assessments. Instead of spending 2+ hours walking a site with a clipboard, your team uploads a photo and receives a breakdown of what's complete, what's missing, and whether the project is on track — in under 5 seconds.
+
+<Note>
+  BuildPulse won **Best Use of MongoDB** at CruzHacks 2025, built in 36 hours.
+</Note>
+
+## The problem
+
+98% of construction projects face delays, costing the industry **$1.6 trillion annually**. Most contractors still track progress with clipboards and spreadsheets — manual processes that take 2+ hours per assessment and catch problems too late to fix.
+
+By the time a delay is identified, it has often already cascaded into missed deadlines, budget overruns, and strained stakeholder relationships.
+
+## The solution
+
+BuildPulse compresses the assessment workflow into four steps:
+
+1. Upload your 3D building model (`.glb` or `.gltf`, up to 50MB)
+2. Click on mesh surfaces to assign trackable zones — Kitchen, Roof, Foundation, and more
+3. Snap a daily progress photo from the job site
+4. Receive an AI-generated completion estimate: *"Kitchen: 67% complete. Predicted delay: 8 days."*
+
+The result: a 2+ hour manual process reduced to under 5 seconds.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | Next.js 16, React 19, Tailwind CSS, Radix UI |
+| **3D rendering** | Three.js, React Three Fiber |
+| **Backend** | Next.js API routes, Mongoose |
+| **File storage** | MongoDB Atlas + GridFS |
+| **Relational data** | Supabase (PostgreSQL) |
+| **AI vision** | Google Gemini 2.0 Flash |
+| **Authentication** | Auth0 (`@auth0/nextjs-auth0`) |
+| **Video reports** | OpenNote SDK (`@opennote-ed/sdk`) |
+| **Charts** | Recharts |
+| **Deployment** | Vercel |
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Projects" icon="folder-open" href="/features/projects">
+    Create construction projects with deadline tracking, budget fields, and overall progress rollup across all zones
+  </Card>
+  <Card title="Zone management" icon="layer-group" href="/features/zones">
+    Click directly on 3D model meshes to define trackable zones and monitor per-zone completion history
+  </Card>
+  <Card title="AI analysis" icon="brain" href="/features/ai-analysis">
+    Gemini 2.0 Flash compares daily site photos against 3D model renders to estimate completion with a confidence rating
+  </Card>
+  <Card title="Delay prediction" icon="chart-line" href="/features/delay-prediction">
+    Velocity-based forecasting detects when a project is trending toward a missed deadline — weeks before it happens
+  </Card>
+  <Card title="Stakeholder reports" icon="film" href="/features/reports">
+    Generate one-click AI video updates for investors and clients using the OpenNote SDK
+  </Card>
+</CardGroup>

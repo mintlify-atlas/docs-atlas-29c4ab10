@@ -1,0 +1,77 @@
+---
+title: "Projects"
+description: "Managing construction projects in BuildPulse."
+---
+
+A project in BuildPulse represents a single construction job. Each project holds a reference to your completed design—either a 3D model or reference images—and tracks overall progress as your zones check in over time.
+
+## Project data model
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique project identifier (MongoDB ObjectId as string) |
+| `name` | string | Project display name |
+| `reference_type` | `'images' \| '3d_model'` | The type of reference used for zone tracking |
+| `model_url` | string \| null | Server-relative path to the 3D model (e.g. `/uploads/model.glb`) or `null` |
+| `target_completion_date` | string \| null | ISO date string for the project deadline |
+| `overall_progress` | number | Aggregate progress percentage (0–100) across all zones |
+| `budget` | number | Total project budget; defaults to `0` |
+| `progress_history` | `{date, progress}[]` | Ordered snapshots of overall progress over time |
+| `report_video_id` | string \| null | OpenNote video ID for the generated stakeholder report |
+| `report_video_url` | string \| null | Local path or S3 URL of the completed report video |
+| `created_at` | string | ISO timestamp of when the project was created |
+
+## Creating a project
+
+Navigate to `/new` to open the project creation wizard. It walks you through two or three steps depending on the reference type you choose.
+
+<Steps>
+  <Step title="Enter project details">
+    Fill in a project name, target completion date, and an optional budget. The target completion date drives both delay detection and the prediction engine.
+  </Step>
+  <Step title="Upload your completed design">
+    Choose one of two reference modes:
+
+    - **3D model** — upload a `.glb` or `.gltf` file. After the project is created, you can click directly on the model mesh to assign trackable zones.
+    - **Images** — upload reference photos for each interior room plus any exterior shots. Each room becomes a zone automatically.
+  </Step>
+  <Step title="Upload a reference image (images mode only)">
+    If you selected the images reference type, upload a site photo or project plan. This image appears alongside progress photos during future check-ins.
+  </Step>
+</Steps>
+
+Once you click **Create Project**, you are redirected to the dashboard where your new project appears as a card.
+
+## Project dashboard
+
+The dashboard at `/dashboard` displays all your projects as cards in a responsive grid. Each card shows:
+
+- Project name and reference type (3D model or images)
+- Overall progress as an animated percentage cylinder
+- Days until the deadline
+- An **On Track** or **Behind** badge
+
+Clicking any card takes you to the project detail page at `/project/[id]`.
+
+## Project detail page
+
+The detail page gives you a full breakdown of a project:
+
+- An interactive 3D model viewer (for 3D model projects)
+- All zones with their current completion percentages
+- A progress chart over time
+- AI completion prediction and delay cost cards
+- A **Generate Report** button for creating stakeholder video reports
+
+## Delay detection
+
+A project is flagged as **Behind** on the dashboard when both of the following are true:
+
+1. The deadline is one day away or less (`daysUntilDeadline <= 1`)
+2. The project has at least one zone
+
+This threshold exists because a project with no zones has no progress data to evaluate.
+
+<Tip>
+Set a realistic target completion date when you create the project. The delay prediction engine and the AI report both use this date to calculate velocity, estimated completion, and financial impact. An arbitrary or placeholder date will produce misleading forecasts.
+</Tip>

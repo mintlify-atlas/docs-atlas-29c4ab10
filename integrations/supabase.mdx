@@ -1,0 +1,147 @@
+---
+title: "Supabase"
+description: "How BuildPulse uses Supabase for relational data storage and file uploads for photos and reference images."
+---
+
+BuildPulse uses Supabase for two things: object storage for reference images and progress photos, and a PostgreSQL database for progress entries. Projects and zones are stored in MongoDB.
+
+<Note>
+  BuildPulse splits data across two backends. MongoDB stores projects, zones (rooms), and 3D model files. Supabase stores progress entry records and the three file storage buckets for photos. See the [MongoDB integration](/integrations/mongodb) for details on project and zone storage.
+</Note>
+
+## Client setup
+
+The Supabase client is initialized in `lib/supabase.ts` using your project URL and anon key:
+
+```typescript
+import { createClient } from '@supabase/supabase-js'
+
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+```
+
+Both variables are prefixed with `NEXT_PUBLIC_` so they are available in browser-side code.
+
+## Storage buckets
+
+BuildPulse uses three public storage buckets:
+
+| Bucket | Constant | Purpose |
+|---|---|---|
+| `models` | `STORAGE_BUCKETS.MODELS` | 3D model files uploaded via `POST /api/upload` |
+| `reference-images` | `STORAGE_BUCKETS.REFERENCE_IMAGES` | Zone reference photos |
+| `progress-photos` | `STORAGE_BUCKETS.PROGRESS_PHOTOS` | Daily check-in photos |
+
+Files are uploaded using the `uploadFile` helper:
+
+```typescript
+async function uploadFile(
+  bucket: keyof typeof STORAGE_BUCKETS,
+  file: File,
+  path?: string
+): Promise<string>
+```
+
+The function uploads the file, then returns the public URL from `getPublicUrl`. If no `path` is provided, a unique filename is generated from a timestamp and the sanitized original name.
+
+A companion `uploadDataUrl` function accepts a base64 data URL (for example, from the browser `FileReader` API) instead of a `File` object.
+
+## Database schema
+
+The PostgreSQL schema is defined in three tables:
+
+```sql
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Projects table
+CREATE TABLE projects (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    reference_type TEXT NOT NULL CHECK (reference_type IN ('images', '3d_model')),
+    model_url TEXT,
+    target_completion_date DATE,
+    overall_progress INTEGER DEFAULT 0 CHECK (overall_progress >= 0 AND overall_progress <= 100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Rooms table
+CREATE TABLE rooms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    reference_image_url TEXT,
+    model_camera_position JSONB,
+    current_percent INTEGER DEFAULT 0 CHECK (current_percent >= 0 AND current_percent <= 100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Progress entries table
+CREATE TABLE progress_entries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    photo_url TEXT NOT NULL,
+    ai_estimated_percent INTEGER CHECK (ai_estimated_percent >= 0 AND ai_estimated_percent <= 100),
+    ai_confidence TEXT CHECK (ai_confidence IN ('high', 'medium', 'low')),
+    visible_completed TEXT[],
+    still_missing TEXT[],
+    notes TEXT,
+    captured_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_rooms_project_id ON rooms(project_id);
+CREATE INDEX idx_progress_entries_room_id ON progress_entries(room_id);
+CREATE INDEX idx_projects_created_at ON projects(created_at DESC);
+CREATE INDEX idx_progress_entries_captured_at ON progress_entries(captured_at DESC);
+```
+
+## Setup
+
+<Steps>
+  <Step title="Create a Supabase project">
+    Go to [supabase.com](https://supabase.com), sign in, and click **New Project**. Choose a name, database password, and region. Wait about two minutes for the project to provision.
+  </Step>
+
+  <Step title="Run the SQL schema">
+    In your Supabase dashboard, open **SQL Editor** and click **New query**. Paste the full SQL schema above and click **Run**. You should see "Success. No rows returned."
+  </Step>
+
+  <Step title="Create the storage buckets">
+    Go to **Storage** in the Supabase dashboard and create three buckets. For each bucket, enable the **Public bucket** toggle:
+
+    - `models`
+    - `reference-images`
+    - `progress-photos`
+
+    <Warning>
+      Bucket names must match exactly. The app will fail to upload files if a bucket is missing or named incorrectly.
+    </Warning>
+  </Step>
+
+  <Step title="Copy your API credentials">
+    Go to **Project Settings → API**. Copy the **Project URL** and the **anon/public** key.
+  </Step>
+
+  <Step title="Add environment variables">
+    Create or update `.env.local` in your project root:
+
+    ```bash
+    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-key-here
+    ```
+
+    Restart your dev server after adding these variables.
+  </Step>
+</Steps>
+
+## Environment variables
+
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon/public key |
+
+The app throws a startup error if either variable is missing.

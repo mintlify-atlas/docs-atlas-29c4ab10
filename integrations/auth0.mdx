@@ -1,0 +1,96 @@
+---
+title: "Auth0"
+description: "How BuildPulse uses Auth0 to protect all routes and manage user sessions."
+---
+
+BuildPulse uses Auth0 for authentication. All routes are protected via Next.js middleware, so unauthenticated users are redirected to Auth0 to sign in before they can access any page.
+
+## How route protection works
+
+The middleware in `middleware.ts` runs on every incoming request and delegates to the Auth0 SDK:
+
+```typescript
+import { NextRequest } from 'next/server'
+import { auth0 } from '@/lib/auth0'
+
+export async function middleware(req: NextRequest) {
+  return await auth0.middleware(req)
+}
+
+export const config = {
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)',
+  ],
+}
+```
+
+The matcher excludes Next.js static assets, image optimization routes, and standard web files (`favicon.ico`, `sitemap.xml`, `robots.txt`). Everything else requires authentication.
+
+Auth0 handles login, logout, session management, and user profile — you do not need to implement any of these yourself.
+
+## Setup
+
+<Steps>
+  <Step title="Create an Auth0 account and application">
+    Go to [auth0.com](https://auth0.com) and sign in. In your dashboard, navigate to **Applications → Applications** and click **Create Application**. Choose **Regular Web Applications** as the application type.
+  </Step>
+
+  <Step title="Configure callback and logout URLs">
+    In your application settings, set the following URLs to match your deployment:
+
+    **Allowed Callback URLs:**
+    ```
+    http://localhost:3000/auth/callback
+    ```
+
+    **Allowed Logout URLs:**
+    ```
+    http://localhost:3000
+    ```
+
+    Add your production domain alongside `localhost` when you deploy.
+  </Step>
+
+  <Step title="Copy your credentials">
+    From the **Settings** tab of your Auth0 application, copy:
+    - **Domain** (e.g., `your-tenant.auth0.com`)
+    - **Client ID**
+    - **Client Secret**
+  </Step>
+
+  <Step title="Add environment variables">
+    Add the following to your `.env.local`:
+
+    ```bash
+    AUTH0_SECRET=a-long-random-secret-at-least-32-characters
+    AUTH0_BASE_URL=http://localhost:3000
+    AUTH0_ISSUER_BASE_URL=https://your-tenant.auth0.com
+    AUTH0_CLIENT_ID=your_client_id
+    AUTH0_CLIENT_SECRET=your_client_secret
+    ```
+
+    Generate a value for `AUTH0_SECRET` with:
+
+    ```bash
+    openssl rand -hex 32
+    ```
+  </Step>
+
+  <Step title="Restart your dev server">
+    Stop and restart `npm run dev` to pick up the new environment variables.
+  </Step>
+</Steps>
+
+## Environment variables
+
+| Variable | Description |
+|---|---|
+| `AUTH0_SECRET` | Random secret used to encrypt session cookies (min 32 chars) |
+| `AUTH0_BASE_URL` | The base URL of your application |
+| `AUTH0_ISSUER_BASE_URL` | Your Auth0 tenant URL (e.g., `https://your-tenant.auth0.com`) |
+| `AUTH0_CLIENT_ID` | Auth0 application client ID |
+| `AUTH0_CLIENT_SECRET` | Auth0 application client secret |
+
+<Tip>
+  Set `AUTH0_BASE_URL` to your production domain (e.g., `https://buildpulse.vercel.app`) when deploying. The Auth0 SDK uses this value to construct redirect URLs, so an incorrect value will break the login flow in production.
+</Tip>

@@ -1,97 +1,55 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "BuildPulse Documentation"
+description: "AI-powered construction progress tracking. Upload 3D models, assign zones, snap photos, and get instant AI-driven completion estimates — in under 5 seconds."
 ---
 
-## Setting up
+BuildPulse transforms construction site monitoring by combining 3D model visualization with Google Gemini AI vision. Instead of spending 2+ hours on manual progress assessments, your team uploads a daily photo and receives an instant breakdown of what's complete, what's missing, and whether the project is on track to meet its deadline.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Set up BuildPulse and track your first project in minutes
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="AI Progress Analysis" icon="brain" href="/features/ai-analysis">
+    Learn how Gemini vision analyzes site photos against 3D models
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="API Reference" icon="code" href="/api/projects/list">
+    Explore the full REST API for projects, zones, and progress
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Delay Prediction" icon="chart-line" href="/features/delay-prediction">
+    Understand how velocity-based forecasting catches delays early
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## How BuildPulse works
 
-Everything you need to create world-class documentation.
+<Steps>
+  <Step title="Upload your 3D model">
+    Import a `.glb` or `.gltf` building model (up to 50MB). BuildPulse stores it in MongoDB GridFS and renders it interactively in your browser.
+  </Step>
+  <Step title="Assign trackable zones">
+    Click directly on mesh surfaces in the 3D viewer to define zones — Kitchen, Roof, Foundation, Exterior Walls, and more. Each zone becomes an independent tracking unit.
+  </Step>
+  <Step title="Check in with a photo">
+    On-site, snap a photo of the construction area and upload it to the zone. Gemini 2.0 Flash compares the photo against your 3D model render and returns a completion estimate with confidence rating.
+  </Step>
+  <Step title="Monitor and forecast">
+    Your dashboard aggregates zone progress, plots completion velocity over time, and warns you when the project is at risk of missing its target date — before it's too late to act.
+  </Step>
+</Steps>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Core features
 
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Projects" icon="folder-open" href="/features/projects">
+    Create and manage construction projects with deadline tracking and overall progress rollup
+  </Card>
+  <Card title="Zone management" icon="layer-group" href="/features/zones">
+    Interactive 3D zone assignment with per-zone completion percentages and history
+  </Card>
+  <Card title="Shareholder reports" icon="film" href="/features/reports">
+    One-click AI-generated video reports for stakeholders and investors
+  </Card>
+  <Card title="Environment setup" icon="gear" href="/environment-variables">
+    Configure API keys and service connections for your deployment
+  </Card>
+</CardGroup>

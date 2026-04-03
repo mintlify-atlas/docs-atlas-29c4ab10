@@ -1,0 +1,168 @@
+---
+title: "Suggest Zone Name"
+description: "Use Gemini AI to suggest a building component name for a selected 3D mesh surface."
+---
+
+`POST /api/suggest-room`
+
+When a user clicks on a mesh in the 3D model viewer, BuildPulse calls this endpoint to suggest a descriptive building component name — such as "Roof", "Front Wall", or "Foundation Slab" — based on the mesh's geometry and surface properties.
+
+The endpoint uses Gemini 2.0 Flash (via the `@ai-sdk/google` package) to analyze geometric data and return a structured suggestion. If the AI call fails, the endpoint falls back to a heuristic-based suggestion derived from the geometry shape.
+
+---
+
+## Request body
+
+<ParamField body="isHorizontal" type="boolean" required>
+  Whether the selected surface is horizontal (floor or ceiling) or vertical (wall).
+</ParamField>
+
+<ParamField body="surfaceArea" type="number" required>
+  Approximate surface area of the selected mesh in scene units.
+</ParamField>
+
+<ParamField body="normalY" type="number" required>
+  The Y component of the surface normal vector. Positive values indicate an upward-facing surface; negative values indicate a downward-facing one.
+</ParamField>
+
+<ParamField body="normalX" type="number" required>
+  The X component of the surface normal vector. Used to determine which direction a wall faces.
+</ParamField>
+
+<ParamField body="normalZ" type="number" required>
+  The Z component of the surface normal vector.
+</ParamField>
+
+<ParamField body="objectDensity" type="number" required>
+  Approximate count of nearby objects or fixtures in the scene. Used to distinguish door frames from open walls.
+</ParamField>
+
+<ParamField body="meshName" type="string">
+  The name of the selected mesh in the 3D model file, if available. Mesh names like `"roof_panel"` or `"exterior_wall_north"` give the AI a strong hint.
+</ParamField>
+
+<ParamField body="materialName" type="string">
+  The name of the material applied to the selected mesh, if available.
+</ParamField>
+
+<ParamField body="selectionType" type="string" required>
+  The selection mode used (e.g., `"mesh"` or `"face"`).
+</ParamField>
+
+<ParamField body="geometry" type="object">
+  Detailed 3D geometry data for the selected mesh.
+
+  <Expandable title="geometry properties">
+    <ParamField body="width" type="number">Bounding box width in scene units.</ParamField>
+    <ParamField body="height" type="number">Bounding box height in scene units.</ParamField>
+    <ParamField body="depth" type="number">Bounding box depth in scene units.</ParamField>
+    <ParamField body="positionX" type="number">World X position of the mesh center.</ParamField>
+    <ParamField body="positionY" type="number">World Y position of the mesh center.</ParamField>
+    <ParamField body="positionZ" type="number">World Z position of the mesh center.</ParamField>
+    <ParamField body="vertexCount" type="number">Number of vertices in the mesh.</ParamField>
+    <ParamField body="faceCount" type="number">Number of faces in the mesh.</ParamField>
+    <ParamField body="aspectRatio" type="number">Width-to-height ratio of the bounding box.</ParamField>
+    <ParamField body="isFlat" type="boolean">True when the mesh is thin in one dimension (panel-like).</ParamField>
+    <ParamField body="isTall" type="boolean">True when height significantly exceeds width and depth (column-like).</ParamField>
+    <ParamField body="isWide" type="boolean">True when width significantly exceeds height and depth.</ParamField>
+    <ParamField body="relativeHeight" type="string">Vertical position within the scene: `"ground"`, `"mid"`, or `"top"`.</ParamField>
+  </Expandable>
+</ParamField>
+
+---
+
+## Response
+
+<ResponseField name="suggestedName" type="string">
+  The AI's top suggestion for the building component name (e.g., `"Roof"`, `"Front Wall"`, `"Foundation Slab"`, `"Pillar"`).
+</ResponseField>
+
+<ResponseField name="confidence" type="string">
+  How confident the model is in its suggestion: `"high"`, `"medium"`, or `"low"`.
+</ResponseField>
+
+<ResponseField name="reason" type="string">
+  A brief explanation of why the model chose this name.
+</ResponseField>
+
+<ResponseField name="alternativeNames" type="string[]">
+  Up to three alternative component name suggestions.
+</ResponseField>
+
+---
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST 'https://your-buildpulse-app.vercel.app/api/suggest-room' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "isHorizontal": true,
+    "surfaceArea": 120,
+    "normalY": -1,
+    "normalX": 0,
+    "normalZ": 0,
+    "objectDensity": 2,
+    "meshName": "roof_main",
+    "selectionType": "mesh",
+    "geometry": {
+      "width": 12,
+      "height": 0.3,
+      "depth": 10,
+      "positionX": 0,
+      "positionY": 8,
+      "positionZ": 0,
+      "vertexCount": 400,
+      "faceCount": 200,
+      "aspectRatio": 40,
+      "isFlat": true,
+      "isTall": false,
+      "isWide": true,
+      "relativeHeight": "top"
+    }
+  }'
+```
+
+```typescript TypeScript
+const res = await fetch('/api/suggest-room', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    isHorizontal: true,
+    surfaceArea: 120,
+    normalY: -1,
+    normalX: 0,
+    normalZ: 0,
+    objectDensity: 2,
+    meshName: 'roof_main',
+    selectionType: 'mesh',
+    geometry: {
+      width: 12, height: 0.3, depth: 10,
+      positionX: 0, positionY: 8, positionZ: 0,
+      vertexCount: 400, faceCount: 200,
+      aspectRatio: 40, isFlat: true, isTall: false, isWide: true,
+      relativeHeight: 'top',
+    },
+  }),
+})
+
+const suggestion = await res.json()
+// {
+//   suggestedName: 'Roof',
+//   confidence: 'high',
+//   reason: 'Flat horizontal surface at top of model with mesh name containing "roof"',
+//   alternativeNames: ['Roof Panel', 'Ceiling', 'Soffit']
+// }
+```
+
+</CodeGroup>
+
+<Note>
+  This endpoint is called automatically by the 3D model viewer when you click on a mesh. You do not need to call it directly unless you are building a custom integration.
+</Note>
+
+<Tip>
+  Including the `geometry` object and any available `meshName` or `materialName` produces significantly better suggestions. Without geometry data, the model falls back to simple heuristics based on the surface orientation and area.
+</Tip>

@@ -1,80 +1,176 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick start"
+description: "Clone, configure, and run BuildPulse locally in under 10 minutes."
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before you begin, make sure you have accounts and credentials for each service BuildPulse depends on:
 
-### Step 1: Set up your local environment
+- **Node.js 18+** — [nodejs.org](https://nodejs.org)
+- **MongoDB Atlas account** — for project data and GridFS model storage
+- **Google AI Studio API key** — for Gemini 2.0 Flash vision analysis
+- **Auth0 application** — for authentication (all routes are protected by default)
+- **Supabase project** — for relational data and file storage buckets
+- **OpenNote API key** — for AI-generated video stakeholder reports
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+<Steps>
 
-### Step 2: Deploy your changes
+<Step title="Clone the repository">
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+```bash
+git clone https://github.com/pranad-dev/buildpulse.git
+cd buildpulse
+```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+</Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+<Step title="Install dependencies">
 
-### Step 3: Go live
+```bash
+npm install
+```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+</Step>
 
-## Next steps
+<Step title="Configure environment variables">
 
-Now that you have your docs running, explore these key features:
+Copy the example env file and fill in your credentials:
 
-<CardGroup cols={2}>
+```bash
+cp .env.example .env.local
+```
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+Open `.env.local` and replace each placeholder with your actual values. See the [Environment Variables](/environment-variables) page for a full description of every key.
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+<Warning>
+  Never commit `.env.local` to git. It contains secrets and is already listed in `.gitignore`.
+</Warning>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+</Step>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+<Step title="Set up Supabase">
 
-</CardGroup>
+BuildPulse uses Supabase for relational data (projects, zones, progress entries) and file storage.
+
+**Create the database schema**
+
+1. Open your [Supabase dashboard](https://supabase.com/dashboard)
+2. Click **SQL Editor** in the left sidebar, then **New query**
+3. Paste the full schema below and click **Run**
+
+```sql
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Drop existing tables if re-running
+DROP TABLE IF EXISTS progress_entries CASCADE;
+DROP TABLE IF EXISTS rooms CASCADE;
+DROP TABLE IF EXISTS projects CASCADE;
+
+-- Projects table
+CREATE TABLE projects (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    reference_type TEXT NOT NULL CHECK (reference_type IN ('images', '3d_model')),
+    model_url TEXT,
+    target_completion_date DATE,
+    overall_progress INTEGER DEFAULT 0 CHECK (overall_progress >= 0 AND overall_progress <= 100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Rooms (zones) table
+CREATE TABLE rooms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    reference_image_url TEXT,
+    model_camera_position JSONB,
+    current_percent INTEGER DEFAULT 0 CHECK (current_percent >= 0 AND current_percent <= 100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Progress entries table
+CREATE TABLE progress_entries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    photo_url TEXT NOT NULL,
+    ai_estimated_percent INTEGER CHECK (ai_estimated_percent >= 0 AND ai_estimated_percent <= 100),
+    ai_confidence TEXT CHECK (ai_confidence IN ('high', 'medium', 'low')),
+    visible_completed TEXT[],
+    still_missing TEXT[],
+    notes TEXT,
+    captured_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for performance
+CREATE INDEX idx_rooms_project_id ON rooms(project_id);
+CREATE INDEX idx_progress_entries_room_id ON progress_entries(room_id);
+CREATE INDEX idx_projects_created_at ON projects(created_at DESC);
+CREATE INDEX idx_progress_entries_captured_at ON progress_entries(captured_at DESC);
+```
+
+You should see "Success. No rows returned" — that means the schema was created correctly.
+
+**Create storage buckets**
+
+BuildPulse needs three public storage buckets in Supabase Storage:
+
+1. Click **Storage** in the left sidebar, then **New bucket**
+2. Create each of the following buckets with **Public bucket** toggled **on**:
+
+| Bucket name | Contents |
+|---|---|
+| `models` | `.glb` and `.gltf` 3D model files |
+| `reference-images` | Zone reference photos |
+| `progress-photos` | Daily check-in site photos |
+
+<Tip>
+  Bucket names must match exactly. The application references them as `models`, `reference-images`, and `progress-photos`.
+</Tip>
+
+**Get your Supabase credentials**
+
+1. Go to **Project Settings** → **API**
+2. Copy your **Project URL** and **anon/public key**
+3. Add them to `.env.local`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+</Step>
+
+<Step title="Start the development server">
+
+```bash
+npm run dev
+```
+
+</Step>
+
+<Step title="Open the app">
+
+Navigate to [http://localhost:3000](http://localhost:3000).
+
+Auth0 middleware protects all routes by default (see `middleware.ts`). You will be redirected to the Auth0 login page if you are not authenticated. After logging in, you'll be returned to the dashboard.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The middleware matcher covers all routes except Next.js static assets (`_next/static`, `_next/image`, `favicon.ico`). There is no public unauthenticated path in this app.
 </Note>
+
+</Step>
+
+<Step title="Create your first project">
+
+1. Click **New Project** on the dashboard
+2. Enter a project name and target completion date
+3. Upload a `.glb` or `.gltf` 3D model (up to 50MB) — it will be stored via MongoDB GridFS
+4. Click **Create Project**
+
+You'll be redirected to the project dashboard where you can assign zones and upload progress photos.
+
+</Step>
+
+</Steps>

@@ -1,0 +1,121 @@
+---
+title: "Environment variables"
+description: "All environment variables required to run BuildPulse, grouped by service."
+---
+
+BuildPulse connects to five external services. Each requires one or more environment variables in your `.env.local` file.
+
+<Warning>
+  Never commit `.env.local` to git. It contains secrets including your Auth0 client secret, MongoDB connection string, and API keys. The file is already listed in `.gitignore`.
+</Warning>
+
+## Full template
+
+Copy this into `.env.local` and replace each placeholder with your actual value:
+
+```bash
+# MongoDB
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>?retryWrites=true&w=majority
+
+# Google Gemini
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_ai_studio_api_key
+
+# Auth0
+AUTH0_SECRET=a_long_random_string_at_least_32_chars
+AUTH0_BASE_URL=http://localhost:3000
+AUTH0_ISSUER_BASE_URL=https://your-tenant.auth0.com
+AUTH0_CLIENT_ID=your_auth0_client_id
+AUTH0_CLIENT_SECRET=your_auth0_client_secret
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# OpenNote
+OPENNOTE_API_KEY=your_opennote_api_key
+```
+
+---
+
+## MongoDB
+
+BuildPulse uses MongoDB Atlas as the primary database. [Mongoose](https://mongoosejs.com) manages the connection with connection pooling across serverless function invocations. Large 3D model files (`.glb`, `.gltf`) are stored using MongoDB GridFS.
+
+<ParamField path="MONGODB_URI" type="string" required>
+  The full MongoDB Atlas connection string for your cluster. Found in your Atlas dashboard under **Database** → **Connect** → **Connect your application**.
+
+  Example: `mongodb+srv://user:password@cluster0.abc123.mongodb.net/buildpulse?retryWrites=true&w=majority`
+</ParamField>
+
+---
+
+## Google Gemini
+
+BuildPulse uses Google Gemini 2.0 Flash via the `@google/generative-ai` package to compare daily site photos against 3D model renders and estimate zone completion percentages.
+
+<ParamField path="GOOGLE_GENERATIVE_AI_API_KEY" type="string" required>
+  Your API key from [Google AI Studio](https://aistudio.google.com/app/apikey). This key is used server-side only and is never exposed to the browser.
+</ParamField>
+
+---
+
+## Auth0
+
+Auth0 handles all authentication via the `@auth0/nextjs-auth0` SDK. The middleware in `middleware.ts` protects every route in the application — there are no public pages.
+
+<ParamField path="AUTH0_SECRET" type="string" required>
+  A long, random string used to encrypt the user session cookie. Generate one with:
+
+  ```bash
+  openssl rand -hex 32
+  ```
+</ParamField>
+
+<ParamField path="AUTH0_BASE_URL" type="string" required>
+  The base URL of your application. Used by Auth0 to construct callback URLs.
+
+  - Local development: `http://localhost:3000`
+  - Production: your deployed URL, e.g. `https://buildpulse.vercel.app`
+</ParamField>
+
+<ParamField path="AUTH0_ISSUER_BASE_URL" type="string" required>
+  The URL of your Auth0 tenant. Found in your Auth0 dashboard under **Settings**.
+
+  Example: `https://your-tenant.us.auth0.com`
+</ParamField>
+
+<ParamField path="AUTH0_CLIENT_ID" type="string" required>
+  The client ID for your Auth0 application. Found in **Applications** → your app → **Settings**.
+</ParamField>
+
+<ParamField path="AUTH0_CLIENT_SECRET" type="string" required>
+  The client secret for your Auth0 application. Found alongside the client ID in **Applications** → your app → **Settings**.
+</ParamField>
+
+---
+
+## Supabase
+
+Supabase stores progress entries and hosts the three file storage buckets for reference images and progress photos. Both variables are prefixed with `NEXT_PUBLIC_` because the Supabase client runs in the browser.
+
+<ParamField path="NEXT_PUBLIC_SUPABASE_URL" type="string" required>
+  Your Supabase project URL. Found in **Project Settings** → **API** → **Project URL**.
+
+  Example: `https://abcdefghijklmnop.supabase.co`
+</ParamField>
+
+<ParamField path="NEXT_PUBLIC_SUPABASE_ANON_KEY" type="string" required>
+  The anon/public key for your Supabase project. Found in **Project Settings** → **API** → **Project API keys** → **anon public**.
+
+  This key is safe to expose in the browser — it only grants access according to your Row Level Security policies.
+</ParamField>
+
+---
+
+## OpenNote
+
+OpenNote generates AI video reports that summarize construction progress for stakeholders and investors. Reports are created via the `@opennote-ed/sdk` package.
+
+<ParamField path="OPENNOTE_API_KEY" type="string" required>
+  Your OpenNote API key. Used server-side when generating report videos from the `/api/report` route.
+</ParamField>

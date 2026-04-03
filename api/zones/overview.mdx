@@ -1,0 +1,356 @@
+---
+title: "Zones API"
+description: "Create, read, update, and delete zones (rooms) within construction projects."
+---
+
+Zones represent discrete areas of a construction project — a kitchen, a roof section, a specific floor, etc. Internally the data model uses the term **room**, and the API paths use `/api/rooms`. The terms _zone_ and _room_ are interchangeable throughout BuildPulse.
+
+<Note>
+All zone data is stored in MongoDB via Mongoose. The `_id` field is serialised to `id` (string) in every response.
+</Note>
+
+---
+
+## List zones
+
+<br />
+
+`GET /api/rooms`
+
+Returns all zones. Pass `project_id` to filter by project.
+
+### Query parameters
+
+<ParamField query="project_id" type="string">
+  MongoDB ObjectId of the project. When omitted, all zones across every project are returned.
+</ParamField>
+
+### Response
+
+Returns an array of zone objects sorted by `created_at` ascending.
+
+<ResponseField name="id" type="string">
+  Unique identifier for the zone (serialised MongoDB ObjectId).
+</ResponseField>
+
+<ResponseField name="project_id" type="string">
+  The project this zone belongs to.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Human-readable zone name (e.g. `"Kitchen"`, `"Roof Level 2"`).
+</ResponseField>
+
+<ResponseField name="reference_image_url" type="string | null">
+  URL of the reference image stored in Supabase Storage, or `null` if not set.
+</ResponseField>
+
+<ResponseField name="model_camera_position" type="object | null">
+  Saved camera state for the 3D model viewer. Shape is arbitrary JSONB — store whatever the viewer emits.
+</ResponseField>
+
+<ResponseField name="mesh_assignments" type="array">
+  List of mesh identifiers assigned to this zone in the 3D model.
+</ResponseField>
+
+<ResponseField name="current_percent" type="number">
+  Latest completion percentage, 0–100.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of zone creation.
+</ResponseField>
+
+<CodeGroup>
+
+```bash cURL
+curl 'https://your-buildpulse-app.vercel.app/api/rooms?project_id=64f1a2b3c4d5e6f7a8b9c0d1'
+```
+
+```typescript TypeScript
+const res = await fetch('/api/rooms?project_id=64f1a2b3c4d5e6f7a8b9c0d1')
+const zones = await res.json()
+// [{ id: '...', name: 'Kitchen', current_percent: 67, ... }, ...]
+```
+
+</CodeGroup>
+
+---
+
+## Create a zone
+
+<br />
+
+`POST /api/rooms`
+
+Creates a new zone and returns it with status `201`.
+
+### Body parameters
+
+<ParamField body="project_id" type="string" required>
+  MongoDB ObjectId of the project this zone belongs to.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Display name for the zone (e.g. `"Master Bathroom"`).
+</ParamField>
+
+<ParamField body="reference_image_url" type="string">
+  Public URL of a reference image. Defaults to `null`.
+</ParamField>
+
+<ParamField body="model_camera_position" type="object">
+  Serialised camera state from the 3D model viewer. Defaults to `null`.
+</ParamField>
+
+<ParamField body="mesh_assignments" type="array">
+  Array of mesh identifiers to associate with this zone. Defaults to `[]`.
+</ParamField>
+
+<ParamField body="current_percent" type="number">
+  Initial completion percentage. Defaults to `0`.
+</ParamField>
+
+### Response
+
+Returns the created zone object with HTTP `201`.
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST 'https://your-buildpulse-app.vercel.app/api/rooms' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "project_id": "64f1a2b3c4d5e6f7a8b9c0d1",
+    "name": "Kitchen",
+    "current_percent": 0
+  }'
+```
+
+```typescript TypeScript
+const res = await fetch('/api/rooms', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    project_id: '64f1a2b3c4d5e6f7a8b9c0d1',
+    name: 'Kitchen',
+    current_percent: 0,
+  }),
+})
+const zone = await res.json()
+// { id: '64f1a2b3c4d5e6f7a8b9c0d2', name: 'Kitchen', current_percent: 0, ... }
+```
+
+</CodeGroup>
+
+---
+
+## Get a zone
+
+<br />
+
+`GET /api/rooms/{id}`
+
+Returns a single zone together with all of its progress entries, newest first.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  MongoDB ObjectId of the zone.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Zone identifier.
+</ResponseField>
+
+<ResponseField name="project_id" type="string">
+  Parent project identifier.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Zone display name.
+</ResponseField>
+
+<ResponseField name="reference_image_url" type="string | null">
+  Reference image URL.
+</ResponseField>
+
+<ResponseField name="model_camera_position" type="object | null">
+  Saved camera state for the 3D viewer.
+</ResponseField>
+
+<ResponseField name="mesh_assignments" type="array">
+  Mesh identifiers assigned to this zone.
+</ResponseField>
+
+<ResponseField name="current_percent" type="number">
+  Current completion percentage.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="progress_entries" type="array">
+  Embedded progress entries for this zone, sorted newest first.
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Progress entry identifier.
+    </ResponseField>
+    <ResponseField name="room_id" type="string">
+      Parent zone identifier.
+    </ResponseField>
+    <ResponseField name="photo_url" type="string">
+      Public URL of the uploaded progress photo.
+    </ResponseField>
+    <ResponseField name="ai_estimated_percent" type="number | null">
+      AI-estimated completion percentage for this check-in.
+    </ResponseField>
+    <ResponseField name="ai_confidence" type="string | null">
+      AI confidence level: `"high"`, `"medium"`, or `"low"`.
+    </ResponseField>
+    <ResponseField name="visible_completed" type="string[] | null">
+      Work items the AI identified as complete in the photo.
+    </ResponseField>
+    <ResponseField name="still_missing" type="string[] | null">
+      Work items the AI identified as not yet complete.
+    </ResponseField>
+    <ResponseField name="notes" type="string | null">
+      Brief observation from the AI analysis.
+    </ResponseField>
+    <ResponseField name="captured_at" type="string">
+      ISO 8601 timestamp when the photo was captured.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+Returns `404` when no zone matches the given `id`.
+
+<CodeGroup>
+
+```bash cURL
+curl 'https://your-buildpulse-app.vercel.app/api/rooms/64f1a2b3c4d5e6f7a8b9c0d2'
+```
+
+```typescript TypeScript
+const res = await fetch('/api/rooms/64f1a2b3c4d5e6f7a8b9c0d2')
+
+if (res.status === 404) {
+  console.error('Zone not found')
+} else {
+  const zone = await res.json()
+  console.log(zone.progress_entries) // sorted newest → oldest
+}
+```
+
+</CodeGroup>
+
+---
+
+## Update a zone
+
+<br />
+
+`PUT /api/rooms/{id}`
+
+Partially updates a zone. Only fields present in the request body are modified.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  MongoDB ObjectId of the zone to update.
+</ParamField>
+
+### Body parameters
+
+All fields are optional. Omit any field you do not want to change.
+
+<ParamField body="name" type="string">
+  New display name.
+</ParamField>
+
+<ParamField body="reference_image_url" type="string">
+  New reference image URL.
+</ParamField>
+
+<ParamField body="model_camera_position" type="object">
+  Updated camera state.
+</ParamField>
+
+<ParamField body="current_percent" type="number">
+  Updated completion percentage (0–100).
+</ParamField>
+
+<ParamField body="mesh_assignments" type="array">
+  Replacement list of mesh identifiers.
+</ParamField>
+
+### Response
+
+Returns the updated zone object. Returns `404` when no zone matches the given `id`.
+
+<CodeGroup>
+
+```bash cURL
+curl -X PUT 'https://your-buildpulse-app.vercel.app/api/rooms/64f1a2b3c4d5e6f7a8b9c0d2' \
+  -H 'Content-Type: application/json' \
+  -d '{ "current_percent": 72 }'
+```
+
+```typescript TypeScript
+const res = await fetch('/api/rooms/64f1a2b3c4d5e6f7a8b9c0d2', {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ current_percent: 72 }),
+})
+const updated = await res.json()
+// { id: '64f1a2b3c4d5e6f7a8b9c0d2', current_percent: 72, ... }
+```
+
+</CodeGroup>
+
+---
+
+## Delete a zone
+
+<br />
+
+`DELETE /api/rooms/{id}`
+
+Deletes the zone and **all of its associated progress entries**. This action cannot be undone.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  MongoDB ObjectId of the zone to delete.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  `true` when the zone and its progress entries were deleted successfully.
+</ResponseField>
+
+Returns `404` when no zone matches the given `id`.
+
+<Warning>
+Deleting a zone permanently removes every progress entry linked to it. There is no soft-delete or recycle bin.
+</Warning>
+
+<CodeGroup>
+
+```bash cURL
+curl -X DELETE 'https://your-buildpulse-app.vercel.app/api/rooms/64f1a2b3c4d5e6f7a8b9c0d2'
+```
+
+```typescript TypeScript
+const res = await fetch('/api/rooms/64f1a2b3c4d5e6f7a8b9c0d2', {
+  method: 'DELETE',
+})
+const { success } = await res.json()
+// { success: true }
+```
+
+</CodeGroup>

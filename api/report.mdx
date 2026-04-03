@@ -1,0 +1,182 @@
+---
+title: "Generate Report"
+description: "Generate AI video reports for project stakeholders using the OpenNote SDK."
+---
+
+The report API produces professional video status reports for shareholders and investors. It uses the **OpenNote SDK** (`picasso` model) to generate narrated video content from live project data — progress percentages, financial impact estimates, zone breakdowns, and timeline analysis.
+
+Generation is asynchronous: `POST` to start the job, then poll `GET` until the video is ready.
+
+<Note>
+Both endpoints require a valid `OPENNOTE_API_KEY` environment variable. Contact your OpenNote account manager for credentials.
+</Note>
+
+---
+
+## Start video generation
+
+<br />
+
+`POST /api/report`
+
+Fetches live project and zone data from MongoDB, calculates financial metrics, builds a detailed prompt, and submits a video generation job to OpenNote. Returns immediately with a `videoId` to poll.
+
+### Body parameters
+
+<ParamField body="projectId" type="string" required>
+  MongoDB ObjectId of the project to report on. The API fetches the project's name, budget, target completion date, and all associated zones automatically.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  `true` when the generation job was accepted by OpenNote.
+</ResponseField>
+
+<ResponseField name="videoId" type="string">
+  OpenNote video identifier. Pass this to `GET /api/report` to check status.
+</ResponseField>
+
+<ResponseField name="projectId" type="string">
+  Echo of the submitted `projectId`.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable status message, e.g. `"Video report generation started"`.
+</ResponseField>
+
+### Error responses
+
+| Status | Cause |
+|--------|-------|
+| `400` | `projectId` is missing from the request body. |
+| `404` | No project found with the given `projectId`. |
+| `500` | `OPENNOTE_API_KEY` is not configured. |
+| `500` | OpenNote returned a failure or did not return a `video_id`. |
+
+---
+
+## Check video status
+
+<br />
+
+`GET /api/report`
+
+Polls the status of a video generation job. When the video is complete, BuildPulse downloads it from S3 and saves it to `/public/reports/` for local serving, then returns the local URL.
+
+### Query parameters
+
+<ParamField query="videoId" type="string" required>
+  The `videoId` returned by `POST /api/report`.
+</ParamField>
+
+<ParamField query="projectId" type="string">
+  MongoDB ObjectId of the project. Used to name the downloaded file and update the project's `report_video_url` field in the database.
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Current generation status: `"pending"`, `"processing"`, `"completed"`, or `"failed"`.
+</ResponseField>
+
+<ResponseField name="progress" type="number">
+  Estimated completion percentage reported by OpenNote (0–100).
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable status message from OpenNote.
+</ResponseField>
+
+<ResponseField name="videoUrl" type="string | null">
+  Local path to the video file (e.g. `/reports/report-proj-123-1700000000.mp4`) once `status === "completed"`. If the local download fails, falls back to the S3 URL. `null` while still generating.
+</ResponseField>
+
+### Error responses
+
+| Status | Cause |
+|--------|-------|
+| `400` | `videoId` query parameter is missing. |
+| `500` | `OPENNOTE_API_KEY` is not configured. |
+| `500` | OpenNote status check failed. |
+
+---
+
+## What the report includes
+
+The video prompt is assembled from live data and covers:
+
+1. **Executive summary** — project status and financial position
+2. **Progress highlights** — what has been accomplished
+3. **Current phase details** — where the project sits in its timeline
+4. **Budget status** — financial overview
+5. **Timeline analysis** — days remaining vs. expected pace
+6. **Financial impact** — cost savings if ahead of schedule; cost overrun risk if behind
+7. **Zone-by-zone breakdown** — each zone's name, percentage, and status label (`"Early Stage"` / `"In Progress"` / `"Complete"`)
+8. **Risk assessment** — potential blockers
+9. **Cost mitigation strategies** — if behind schedule
+10. **Next steps** — upcoming milestones
+11. **Conclusion** — financial outlook and on-time confidence
+
+The financial impact calculation uses `0.1% of project budget per day` as the daily delay cost estimate.
+
+---
+
+## Async polling pattern
+
+<CodeGroup>
+
+```bash cURL
+# 1. Start generation
+curl -X POST 'https://your-buildpulse-app.vercel.app/api/report' \
+  -H 'Content-Type: application/json' \
+  -d '{ "projectId": "64f1a2b3c4d5e6f7a8b9c0d1" }'
+
+# 2. Poll for status (repeat until status === "completed")
+curl 'https://your-buildpulse-app.vercel.app/api/report?videoId=opennote-vid-abc123&projectId=64f1a2b3c4d5e6f7a8b9c0d1'
+```
+
+```typescript TypeScript
+// 1. Start generation
+const res = await fetch('/api/report', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ projectId: 'proj-uuid-here' }),
+})
+
+if (!res.ok) {
+  const { error } = await res.json()
+  throw new Error(error)
+}
+
+const { videoId } = await res.json()
+
+// 2. Poll every 3 seconds until the video is ready
+let videoUrl: string | null = null
+
+while (!videoUrl) {
+  await new Promise((r) => setTimeout(r, 3000))
+
+  const statusRes = await fetch(
+    `/api/report?videoId=${videoId}&projectId=proj-uuid-here`
+  )
+  const data = await statusRes.json()
+
+  console.log(`Status: ${data.status} (${data.progress}%)`)
+
+  if (data.status === 'completed') {
+    videoUrl = data.videoUrl
+  } else if (data.status === 'failed') {
+    throw new Error(`Report generation failed: ${data.message}`)
+  }
+}
+
+console.log('Video ready at:', videoUrl)
+// '/reports/report-proj-uuid-here-1700000000.mp4'
+```
+
+</CodeGroup>
+
+<Note>
+Completed videos are saved to `/public/reports/` in the Next.js project root and served as static assets. If BuildPulse cannot download from S3 (e.g. network issues), the S3 URL is returned directly as a fallback.
+</Note>

@@ -1,0 +1,103 @@
+---
+title: "MongoDB"
+description: "How BuildPulse uses MongoDB Atlas and GridFS for project data and large 3D model file storage."
+---
+
+BuildPulse uses MongoDB for two distinct purposes: storing project, room, and progress data via Mongoose models, and storing large 3D model files (`.glb`/`.gltf`) via GridFS.
+
+## Connection setup
+
+The connection is managed in `lib/mongodb.ts` using a singleton pattern so that repeated calls in a serverless environment reuse the same connection instead of opening a new one on every request.
+
+Set your connection string in `.env.local`:
+
+```bash
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>
+```
+
+The `connectDB()` function caches the connection in `global.mongoose` across hot reloads in development and across invocations in production.
+
+<Tip>
+  Use [MongoDB Atlas](https://www.mongodb.com/atlas) for managed hosting. The free M0 tier is sufficient for development and small deployments.
+</Tip>
+
+## Mongoose data models
+
+BuildPulse defines three Mongoose schemas for its relational data:
+
+### Project
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `String` | Project display name |
+| `reference_type` | `String` | Either `images` or `3d_model` |
+| `model_url` | `String` | URL or GridFS file ID for the 3D model |
+| `target_completion_date` | `Date` | Expected completion date |
+| `overall_progress` | `Number` | Aggregate progress percentage (0–100) |
+| `budget` | `Number` | Project budget |
+| `report_video_id` | `String` | ID of generated stakeholder report video |
+| `progress_history` | `Array` | Array of `{ date, progress }` snapshots |
+| `created_at` | `Date` | Record creation timestamp |
+
+### Room
+
+| Field | Type | Description |
+|---|---|---|
+| `project_id` | `String` | Parent project reference |
+| `name` | `String` | Room or zone name |
+| `reference_image_url` | `String` | URL of the zone reference photo |
+| `model_camera_position` | `Object` | 3D camera position for the zone view |
+| `mesh_assignments` | `Array<String>` | UUIDs of 3D meshes assigned to this zone |
+| `current_percent` | `Number` | Latest progress percentage for the zone |
+| `created_at` | `Date` | Record creation timestamp |
+
+### ProgressEntry
+
+| Field | Type | Description |
+|---|---|---|
+| `room_id` | `String` | Parent room reference |
+| `photo_url` | `String` | URL of the progress photo |
+| `ai_estimated_percent` | `Number` | Completion percentage from Gemini analysis |
+| `ai_confidence` | `String` | `high`, `medium`, or `low` |
+| `visible_completed` | `Array<String>` | Work items identified as complete |
+| `still_missing` | `Array<String>` | Work items not yet visible |
+| `notes` | `String` | Free-form AI observation |
+| `captured_at` | `Date` | Photo capture timestamp |
+
+## GridFS for 3D model files
+
+MongoDB documents have a hard limit of 16 MB. 3D building models in `.glb` or `.gltf` format commonly reach 10–50 MB, well above that limit.
+
+BuildPulse uses **GridFS** to work around this. GridFS automatically splits large files into 255 kB chunks, stores them across multiple documents in a dedicated `uploads` collection, and reassembles them on retrieval—all transparently.
+
+The `lib/gridfs.ts` module provides three helpers:
+
+- `uploadToGridFS(base64Data, filename)` — accepts a base64 data URL, converts it to a buffer, and streams it into GridFS. Returns the GridFS file ID.
+- `getFromGridFS(fileId)` — streams chunks back from GridFS and returns a base64 data URL with the correct MIME type (`model/gltf-binary` for `.glb`, `model/gltf+json` for `.gltf`).
+- `deleteFromGridFS(fileId)` — removes a file and all its chunks from GridFS.
+
+The underlying GridFS bucket is created once per process and cached, using the bucket name `uploads`:
+
+```typescript
+gridFSBucket = new mongoose.mongo.GridFSBucket(conn.connection.db, {
+  bucketName: 'uploads',
+})
+```
+
+Files uploaded to GridFS can be retrieved by their ID via `GET /api/files/{id}`, which returns the file as a base64 data URL with the appropriate MIME type (`model/gltf-binary` for `.glb`, `model/gltf+json` for `.gltf`).
+
+<Note>
+  In the current project creation flow, 3D models are saved to local disk under `public/uploads/` using the `saveToLocalStorage` helper in `lib/local-storage.ts`. The resulting path (e.g., `/uploads/ProjectName_1714000000.glb`) is stored in `Project.model_url` and served as a static asset. GridFS provides an alternative storage backend for larger deployments.
+</Note>
+
+<Note>
+  MongoDB handles 3D model storage. Reference images and daily progress photos are stored separately in Supabase Storage — see the [Supabase integration](/integrations/supabase).
+</Note>
+
+## Environment variable
+
+| Variable | Description |
+|---|---|
+| `MONGODB_URI` | MongoDB Atlas connection string |
+
+The app throws a startup error if this variable is missing, so it must be set before running `npm run dev` or deploying.
